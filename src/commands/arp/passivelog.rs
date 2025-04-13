@@ -1,28 +1,11 @@
-use pnet::datalink::Channel::Ethernet;
-use pnet::datalink::{self, NetworkInterface};
 use pnet::packet::arp::{ArpOperations, ArpPacket};
 use pnet::packet::ethernet::{EtherTypes, EthernetPacket};
 use pnet::packet::Packet;
 
-// Invoke as echo <interface name>
-pub fn passive_log(interface_name: &str) -> anyhow::Result<()> {
-    // Find the network interface with the provided name
-    let interfaces = datalink::interfaces();
-    let interface = interfaces
-        .into_iter()
-        .filter(|iface: &NetworkInterface| iface.name == interface_name)
-        .next()
-        .unwrap();
+use super::utils::get_rawsock;
 
-    // Create a new channel, dealing with layer 2 packets
-    let (_tx, mut rx) = match datalink::channel(&interface, Default::default()) {
-        Ok(Ethernet(tx, rx)) => (tx, rx),
-        Ok(_) => anyhow::bail!("Unhandled channel type"),
-        Err(e) => anyhow::bail!(
-            "An error occurred when creating the datalink channel: {}",
-            e
-        ),
-    };
+pub fn passive_log(interface_name: &str) -> anyhow::Result<()> {
+    let (_interface, _tx, mut rx) = get_rawsock(interface_name, None)?;
 
     loop {
         match rx.next() {
