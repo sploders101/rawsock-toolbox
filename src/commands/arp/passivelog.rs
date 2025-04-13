@@ -33,10 +33,18 @@ pub fn passive_log(interface_name: &str) -> anyhow::Result<()> {
                     if let Some(packet) = ArpPacket::new(packet.payload()) {
                         match packet.get_operation() {
                             ArpOperations::Reply => {
-                                println!("Who is {}? Tell {}.", packet.get_target_proto_addr(), packet.get_sender_hw_addr());
+                                println!(
+                                    "Who is {}? Tell {}.",
+                                    packet.get_target_proto_addr(),
+                                    packet.get_sender_hw_addr()
+                                );
                             }
                             ArpOperations::Request => {
-                                println!("IP {} is owned by {}.", packet.get_sender_proto_addr(), packet.get_sender_hw_addr());
+                                println!(
+                                    "IP {} is at {}.",
+                                    packet.get_sender_proto_addr(),
+                                    packet.get_sender_hw_addr()
+                                );
                             }
                             _ => {}
                         }
