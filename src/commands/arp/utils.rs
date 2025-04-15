@@ -1,4 +1,8 @@
-use std::{net::Ipv4Addr, time::Duration};
+use std::{
+    io::ErrorKind,
+    net::Ipv4Addr,
+    time::{Duration, Instant},
+};
 
 use anyhow::Context;
 use pnet::{
@@ -10,11 +14,12 @@ use pnet::{
     util::MacAddr,
 };
 use procfs::ProcResult;
+use rustc_hash::FxHashMap;
 
 pub fn get_rawsock(
     interface_name: &str,
     read_timeout: Option<Duration>,
-) -> anyhow::Result<(
+) -> std::io::Result<(
     NetworkInterface,
     Box<dyn DataLinkSender>,
     Box<dyn DataLinkReceiver>,
@@ -25,7 +30,12 @@ pub fn get_rawsock(
         .into_iter()
         .filter(|iface: &NetworkInterface| iface.name == interface_name)
         .next()
-        .context("Interface not found")?;
+        .ok_or_else(|| {
+            std::io::Error::new(
+                std::io::ErrorKind::NotFound,
+                "The requested interface was not found.",
+            )
+        })?;
 
     // Create a new channel, dealing with layer 2 packets
     let (tx, rx) = match datalink::channel(
@@ -35,13 +45,14 @@ pub fn get_rawsock(
             promiscuous: true,
             ..Default::default()
         },
-    ) {
-        Ok(Channel::Ethernet(tx, rx)) => (tx, rx),
-        Ok(_) => anyhow::bail!("Unhandled channel type"),
-        Err(e) => anyhow::bail!(
-            "An error occurred when creating the datalink channel: {}",
-            e
-        ),
+    )? {
+        Channel::Ethernet(tx, rx) => (tx, rx),
+        _ => {
+            return Err(std::io::Error::new(
+                ErrorKind::Other,
+                "Unknown datalink type",
+            ))
+        }
     };
 
     return Ok((interface, tx, rx));
@@ -183,5 +194,45 @@ pub fn create_arp_reply_v4(
             packet.set_target_hw_addr(MacAddr::broadcast());
             packet.set_target_proto_addr(spoof_address);
         }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct ArpTableEntry {
+    ip: Ipv4Addr,
+    mac: MacAddr,
+}
+
+/// Right now, this is just a simple hashmap with a simple algorithm.
+/// I may add performance enhancements later.
+pub struct ArpTable {
+    last_request: FxHashMap<Ipv4Addr, Instant>,
+    inner: FxHashMap<Ipv4Addr, MacAddr>,
+}
+impl ArpTable {
+    pub fn new() -> Self {
+        return Self {
+            last_request: FxHashMap::default(),
+            inner: FxHashMap::default(),
+        };
+    }
+    pub fn should_request(&mut self, ip: Ipv4Addr, read_timeout: Duration) -> bool {
+        return match self.last_request.get_mut(&ip) {
+            Some(last_request) if *last_request + read_timeout < Instant::now() => {
+                *last_request = Instant::now();
+                true
+            },
+            Some(_last_request) => false,
+            None => true,
+        };
+    }
+    pub fn add_entry(&mut self, ip: Ipv4Addr, mac: MacAddr) {
+        self.inner.insert(ip, mac);
+    }
+    pub fn remove_entry(&mut self, ip: Ipv4Addr) {
+        self.inner.remove(&ip);
+    }
+    pub fn get_entry(&self, ip: Ipv4Addr) -> Option<MacAddr> {
+        return self.inner.get(&ip).cloned();
     }
 }

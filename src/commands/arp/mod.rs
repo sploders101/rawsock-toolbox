@@ -5,6 +5,7 @@ use send::{send_arp_request, send_gratuitous_arp};
 mod passivelog;
 mod send;
 mod utils;
+mod spoof;
 
 #[derive(clap::Subcommand, Debug, Clone)]
 pub enum ArpSubcommand {

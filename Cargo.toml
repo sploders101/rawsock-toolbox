@@ -7,4 +7,6 @@ edition = "2021"
 anyhow = "1.0.97"
 clap = { version = "4.5.36", features = ["derive"] }
 pnet = "0.35.0"
+prefix-trie = "0.7.0"
 procfs = "0.17.0"
+rustc-hash = "2.1.1"
