@@ -12,5 +12,5 @@ This project contains a variety of tools utilizing raw sockets for things like l
     * Sends ARP requests, which can query or scan devices on the network.
   * `send-reply`
     * Sends ARP replies, which can be used to inform the network of an IP ownership change or spoof other devices for a MITM attack.
-  * `spoof-proxy` (TODO)
+  * `spoof`
     * Performs a bidirectional arp-spoofing attack, but proxies packets back to the original router and vice versa.
