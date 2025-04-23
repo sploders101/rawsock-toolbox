@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 use std::{
     io::ErrorKind,
     net::Ipv4Addr,
@@ -197,21 +199,17 @@ pub fn create_arp_reply_v4(
     }
 }
 
-#[derive(Debug, Clone)]
-pub struct ArpTableEntry {
-    ip: Ipv4Addr,
-    mac: MacAddr,
-}
-
 /// Right now, this is just a simple hashmap with a simple algorithm.
 /// I may add performance enhancements later.
 pub struct ArpTable {
+    our_mac: MacAddr,
     last_request: FxHashMap<Ipv4Addr, Instant>,
     inner: FxHashMap<Ipv4Addr, MacAddr>,
 }
 impl ArpTable {
-    pub fn new() -> Self {
+    pub fn new(our_mac: MacAddr) -> Self {
         return Self {
+            our_mac,
             last_request: FxHashMap::default(),
             inner: FxHashMap::default(),
         };
@@ -221,7 +219,7 @@ impl ArpTable {
             Some(last_request) if *last_request + read_timeout < Instant::now() => {
                 *last_request = Instant::now();
                 true
-            },
+            }
             Some(_last_request) => false,
             None => true,
         };
@@ -234,5 +232,28 @@ impl ArpTable {
     }
     pub fn get_entry(&self, ip: Ipv4Addr) -> Option<MacAddr> {
         return self.inner.get(&ip).cloned();
+    }
+    pub fn get_entry_or_request(
+        &mut self,
+        ip: Ipv4Addr,
+        rawsock_sender: &mut Box<dyn DataLinkSender>,
+    ) -> std::io::Result<Option<MacAddr>> {
+        return match self.get_entry(ip) {
+            Some(mac) => Ok(Some(mac)),
+            None if self.should_request(ip, Duration::from_millis(50)) => {
+                // Send ARP request.
+                let request = create_arp_request_v4_eth(
+                    ip,
+                    // Seems like devices respond to an invalid IP here.
+                    // All they really need is the mac address, and we
+                    // may not have an IP.
+                    Ipv4Addr::from_bits(0),
+                    self.our_mac,
+                );
+                rawsock_sender.send_to(&request, None).unwrap()?;
+                Ok(None)
+            }
+            None => Ok(None),
+        };
     }
 }

@@ -7,15 +7,16 @@ use std::{
 
 use anyhow::Context;
 use pnet::{
-    datalink::{DataLinkReceiver, DataLinkSender}, packet::{
+    packet::{
         arp::ArpPacket,
         ethernet::{EtherTypes, EthernetPacket},
         Packet,
-    }, util::MacAddr
+    },
+    util::MacAddr,
 };
 
 use super::utils::{
-    create_arp_reply_v4_eth, create_arp_request_v4_eth, get_mac_from_ipv4, get_rawsock, ArpTable,
+    create_arp_reply_v4_eth, create_arp_request_v4_eth, get_mac_from_ipv4, get_rawsock,
 };
 
 pub fn send_arp_request(interface: &str, target_ip: Option<Ipv4Addr>) -> anyhow::Result<()> {

@@ -1,11 +1,12 @@
 use std::net::Ipv4Addr;
 
 use send::{send_arp_request, send_gratuitous_arp};
+use spoof::ArpSpoofer;
 
 mod passivelog;
 mod send;
-mod utils;
 mod spoof;
+mod utils;
 
 #[derive(clap::Subcommand, Debug, Clone)]
 pub enum ArpSubcommand {
@@ -43,6 +44,35 @@ pub enum ArpSubcommand {
         /// The address you want to impersonate
         spoof_address: Ipv4Addr,
     },
+    /// This command impersonates devices on the network. Its intended use is for
+    /// targeted packet captures without the need to reconfigure network switches
+    /// or tap an ethernet cable.
+    ///
+    /// WARNING: This attack is *very* noisy, and while I haven't personally seen any
+    /// defense mechanisms for this, it wouldn't be that hard to detect.
+    ///
+    /// More info:
+    /// https://github.com/sploders101/rawsock-toolbox/blob/main/docs/arp-spoofing.md
+    Spoof {
+        /// The network interface with which to execute the attack
+        interface: String,
+
+        /// The primary target of the ARP spoofing attack
+        #[arg(short = 'i', long)]
+        target_ip: Ipv4Addr,
+
+        /// The peers for whom you want to capture the target's traffic
+        #[arg(short = 'p', long)]
+        peer: Vec<Ipv4Addr>,
+
+        /// The gateway IP. This is used to forward packets destined for other networks
+        #[arg(short = 'g', long)]
+        gateway: Ipv4Addr,
+
+        /// Whether to send ARP replies to peers as well to capture responses
+        #[arg(short = 'b', long, default_value_t = false)]
+        bidirectional: bool,
+    },
 }
 
 pub fn run(subcommand: ArpSubcommand) -> anyhow::Result<()> {
@@ -57,5 +87,20 @@ pub fn run(subcommand: ArpSubcommand) -> anyhow::Result<()> {
             target_ip,
             spoof_address,
         } => send_gratuitous_arp(&interface, target_ip, spoof_address),
+        ArpSubcommand::Spoof {
+            interface,
+            target_ip,
+            peer,
+            gateway,
+            bidirectional,
+        } => {
+            let mut spoofer = ArpSpoofer::new(&interface, target_ip, bidirectional, gateway)?;
+            for peer in peer {
+                spoofer.add_peer(peer);
+            }
+            loop {
+                spoofer.tick()?;
+            }
+        }
     };
 }
